@@ -1,0 +1,170 @@
+---
+title: ' HW2 '
+Author: Hasan Alp Yıldızlar
+---
+# Introduction
+We want to forecast the sales of UGS for every quarter of 2007. We will use the data between 2000 and 2006.
+
+## Packages
+```{r}
+library(RcppRoll)
+library(readxl)
+library(lubridate)
+library(zoo)
+library(ggplot2)
+library(scales)
+library(data.table)
+library(corrplot)
+library(ggcorrplot)
+library(GGally)
+library(forecast)
+library(dplyr)
+```
+
+### Heads:
+PU: Average price of a liter of unleaded gasoline in a quarter,
+PG: Average price  of a liter of diesel gasoline in a quarter,
+GNP=Grand total for GNP .
+NUGV= Number of unleaded gasoline using vehicles in the traffic,
+NDGV= Number of diesel gasoline using vehicles in the traffic ,
+GNPA= Agriculture component of Gross National Product ,
+UGS: Unleaded gasoline sale in a given quarter,
+RNUV: An index indicating the rate of new unleaded gasoline using vehicles being added to the traffic in
+a quarter,
+GNPC= Commerce component of Gross National Product ,
+
+
+##  Data Gathering
+```{r}
+getwd()
+path <- "C:/Users/ALP/Downloads/IE360_Spring22_HW2_data.csv"
+
+UGS_Data <- read.csv(path,colClasses=c('character',rep('numeric',10)))
+colnames(UGS_Data) <- c("Quarters", "UGS", "RNUV","NLPG","PU","PG","NUGV","NDGV","GNPA","GNPC","GNPT")
+
+UGS_Data$Quarters <- as.Date(as.yearqtr(UGS_Data$Quarters, format = "%Y_Q%q"))
+
+
+UGS_Data_Table <- UGS_Data[c(1:28),]
+
+
+UGS_Data_Table <- data.table(UGS_Data_Table)
+
+
+```
+
+
+
+##  Data Visualization
+```{r}
+ggplot(UGS_Data_Table, aes(x=Quarters,y=UGS, group = 1)) +
+geom_point() +
+geom_line() +
+labs(y ='2000-2006 UGS')+ 
+ggtitle(' UGS ')
+```
+We can see an overall declining trend and seasonality with respect to time.Mean of UGS per quarter is not stationary because the means of different parts of the data do not results in same value.But variance looks like stationary and independent of time.
+
+
+## Autocorrelation Function
+```{r}
+acf(UGS_Data_Table$UGS)
+
+```
+
+We can see that the values for lag 1 and lag 4 are above the limits. lag 4 might be originated from the quarterly seasonality.Also  autocorrelation at multiples of 4 is larger than others. autocorrelation at lag 1 is added to model.
+
+##  Autocorrelation Plot
+```{r}
+ggpairs(UGS_Data_Table)
+
+```
+
+We can use the ggpairs function to examine independent variables that have a strong correlation with UGS.
+NLPG, PU, PG, NUGV, NDGV, GNPA, seem to have correlation with UGS
+
+
+
+## Model Building. 
+##Adding Trend and Seasonality
+
+```{r}
+UGS_Data_Table[,trend := 1:.N ]
+UGS_Data_Table[,Quarters_:=as.character(month(Quarters))]
+UGS_Data_Forecast <- UGS_Data[c(29,30,31,32),]
+UGS_Data_Forecast <- data.table(UGS_Data_Forecast)
+UGS_Data_Forecast[,trend := 29:32 ]
+UGS_Data_Forecast[,Quarters_:=as.character(month(Quarters))]
+```
+
+
+```{r}
+
+ UGS_Data_Table_Model<- lm(UGS ~ trend+Quarters_, UGS_Data_Table)
+summary(UGS_Data_Table_Model)
+```
+We can say the new model is much more preferable because residual standart error is low and R-squared is high.
+
+
+##Adding NLPG, PU, PG, NUGV, NDGV, GNPA  Variables
+NLPG, PU, PG, NUGV, NDGV, GNPA, seem to have correlation with UGS in autocorrelation diagram.So we will add these variables to the model
+```{r}
+UGS_Data_Table_Model2 <- lm(UGS ~ trend+NLPG+PU+PG+NUGV+NDGV+GNPA + Quarters_,  UGS_Data_Table)
+summary(UGS_Data_Table_Model2)
+```
+R-squared increased when we add NLPG, PU, PG, NUGV, NDGV, GNPA variables. But we can see that residual standart errors decreased.So our model become better. 
+
+## Lagged 1 added  to the Model
+```{r}
+UGS_Data_Table$UGSlag1=lag(UGS_Data_Table$UGS,1)
+UGS_Data_Table_Model3 <-  lm(UGS ~ trend+NLPG+PU+PG+NUGV+NDGV+GNPA +UGSlag1 + Quarters_, UGS_Data_Table)
+summary(UGS_Data_Table_Model3)
+
+```
+R-squared increased when we add lagged 1 variable. But we can see that residual standart errors decreased.So our model become much more better.
+
+
+## 
+```{r}
+checkresiduals(UGS_Data_Table_Model3$residuals)
+
+```
+
+```{r}
+UGS_Data_Table_Model3_Plot=copy(UGS_Data_Table)
+UGS_Data_Table_Model3_Plot[,actual:=UGS]
+UGS_Data_Table_Model3_Plot[,predicted_trend:=predict(UGS_Data_Table_Model3,UGS_Data_Table_Model3_Plot)]
+UGS_Data_Table_Model3_Plot[,residual_trend:=actual-predicted_trend]
+
+ggplot(UGS_Data_Table_Model3_Plot ,aes(x=Quarters)) +
+        geom_line(aes(y=UGS,color='data')) + 
+        geom_line(aes(y=predicted_trend,color='forecast of data'))
+```
+We can see that our model forecast the actual data properly. So we can use the model.
+
+# 3. Forecasting UGS Values
+
+
+```{r}
+
+UGS_Data_Forecast$UGSlag1[1]=UGS_Data_Table$UGS[28]
+
+
+UGS_Data_Forecast[1,"UGS"]=as.numeric(predict(UGS_Data_Table_Model3,newdata=UGS_Data_Forecast[1,]))
+UGS_Data_Forecast[2,"UGS"]=predict(UGS_Data_Table_Model3,newdata=UGS_Data_Forecast[2,])
+UGS_Data_Forecast[3,"UGS"]=predict(UGS_Data_Table_Model3,newdata=UGS_Data_Forecast[3,])
+UGS_Data_Forecast[4,"UGS"]=predict(UGS_Data_Table_Model3,newdata=UGS_Data_Forecast[4,])
+
+UGS_Data_Forecast$UGSlag1[2]=as.numeric(UGS_Data_Forecast[1,"UGS"])
+UGS_Data_Forecast$UGSlag1[3]=as.numeric(UGS_Data_Forecast[2,"UGS"])
+UGS_Data_Forecast$UGSlag1[4]=as.numeric(UGS_Data_Forecast[3,"UGS"])
+
+UGS_Data_Forecast[,"UGS"]
+
+```
+1st Quarter - 645834.0
+2nd Quarter - 897457.8
+3rd Quarter - 951515.9
+4th Quarter - 763122.0
+Conclusion
+To sum up, we tried to predict values for "Unleaded Gasoline Sale" for year 2007. The autocorrelations, p values, their meanings and significancy are considered.To improve the model we add trend and seasonilty components,NLPG, PU, PG, NUGV, NDGV, GNPA variables,lagged 1 variable is added.
