@@ -6,6 +6,6 @@ Homework 2
 Homework 3
 [link](https://moodle.boun.edu.tr/login/login.php)
 Proje
-[link](wmape)
-[link](ProjectDescriptin)
-[link](IE360ProjectReport)
+[link](wmape.xlsx)
+[link](ProjectDescriptin.pdf)
+[link](IE360ProjectReport.pdf)
